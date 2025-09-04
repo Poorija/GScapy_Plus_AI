@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*'.egg-info'/
+.Python
+env/
+venv/
+
+# Logs
+*.log
+logs/
+
+# IDEs
+.idea/
+.vscode/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
