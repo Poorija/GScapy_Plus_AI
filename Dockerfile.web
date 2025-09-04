@@ -1,0 +1,60 @@
+# Stage 1: Base image with Python and system dependencies
+FROM ubuntu:22.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    git \
+    curl \
+    supervisor \
+    # Nmap is a core tool
+    nmap \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Ollama
+RUN curl -L https://ollama.com/download/ollama-linux-amd64 -o /usr/local/bin/ollama && \
+    chmod +x /usr/local/bin/ollama
+
+# Set up the working directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application source code
+COPY setup.py .
+COPY gscapy_web ./gscapy_web
+COPY gscapy.py .
+COPY ai_tab.py .
+COPY icons ./icons
+COPY tools ./tools
+
+# Install the gscapy_web package itself in editable mode
+# This makes the imports work correctly without sys.path hacks
+RUN python3 -m pip install -e .
+
+# Copy the supervisor configuration
+COPY docker/supervisord.conf.web /etc/supervisor/conf.d/supervisord.conf
+
+# Expose ports for FastAPI, Streamlit, and Ollama
+EXPOSE 8000
+EXPOSE 8501
+EXPOSE 11434
+
+# --- Pre-pull Ollama model ---
+# This RUN command starts ollama in the background, pulls a model,
+# and then stops the background ollama process.
+# This ensures the model is baked into the image.
+RUN /bin/bash -c 'nohup /usr/local/bin/ollama serve > /var/log/ollama_pull.log 2>&1 & \
+    sleep 10 && \
+    /usr/local/bin/ollama pull llama3 && \
+    pkill -f ollama'
+
+# The command to run when the container starts
+CMD ["/usr/bin/supervisord"]
