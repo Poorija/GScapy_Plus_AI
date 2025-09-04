@@ -1,0 +1,12 @@
+PyQt6
+scapy
+psutil
+numpy
+lxml
+pyqtgraph
+gputil
+reportlab
+python-docx
+qt-material
+dnspython
+requests

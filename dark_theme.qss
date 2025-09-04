@@ -1,0 +1,139 @@
+/* Dark Theme - Based on Light Theme Layout */
+
+QWidget {
+    background-color: rgb(40, 44, 52); /* Dark */
+    color: rgb(221, 221, 221); /* Dark */
+    font: 10pt 'Segoe UI', Arial, sans-serif; /* Unified */
+}
+
+QMainWindow {
+    background-color: rgb(40, 44, 52); /* Dark */
+}
+
+QMainWindow, QDockWidget {
+    background-position: center; /* Unified */
+}
+
+QTabWidget::pane {
+    border: 1px solid rgb(44, 49, 58); /* Dark */
+    border-radius: 8px; /* Unified */
+    background-color: rgb(33, 37, 43); /* Dark */
+}
+
+QTabBar::tab {
+    background-color: rgb(52, 59, 72); /* Dark */
+    padding: 10px; /* Unified */
+    border: 1px solid rgb(44, 49, 58); /* Dark */
+    border-bottom: none;
+    border-top-left-radius: 8px; /* Unified */
+    border-top-right-radius: 8px; /* Unified */
+}
+
+QTabBar::tab:selected {
+    background-color: rgb(40, 44, 52); /* Dark */
+    border: 1px solid rgb(44, 49, 58); /* Dark */
+    border-bottom: 1px solid rgb(40, 44, 52); /* Dark */
+}
+
+QPlainTextEdit, QTreeWidget, QListWidget, QLineEdit, QFrame, QTextEdit, QScrollArea {
+    background-color: rgb(27, 29, 35); /* Dark */
+    color: rgb(221, 221, 221); /* Dark */
+    border: 1px solid rgb(44, 49, 58); /* Dark */
+    border-radius: 8px; /* Unified */
+    padding: 5px; /* Unified */
+}
+
+QTreeWidget::item:selected, QListWidget::item:selected {
+    background-color: rgb(189, 147, 249); /* Dark */
+}
+
+QHeaderView::section {
+    background-color: rgb(33, 37, 43); /* Dark */
+    padding: 5px; /* Unified */
+    border: 1px solid rgb(44, 49, 58); /* Dark */
+    border-radius: 0px; /* Unified */
+}
+
+QPushButton {
+    background-color: rgb(52, 59, 72); /* Dark */
+    border: 1px solid rgb(61, 70, 86); /* Dark */
+    padding: 8px; /* Unified */
+    border-radius: 8px; /* Unified */
+    min-width: 80px; /* Unified */
+}
+
+QPushButton:hover {
+    background-color: rgb(57, 65, 80); /* Dark */
+}
+
+QPushButton:pressed {
+    background-color: rgb(35, 40, 49); /* Dark */
+}
+
+QComboBox {
+    border: 1px solid rgb(44, 49, 58); /* Dark */
+    padding: 5px; /* Unified */
+    border-radius: 8px; /* Unified */
+    background-color: rgb(27, 29, 35); /* Dark */
+}
+
+QComboBox::drop-down {
+    border: none; /* Unified */
+}
+
+QComboBox QAbstractItemView {
+    background-color: rgb(33, 37, 43); /* Dark */
+    border: 1px solid rgb(44, 49, 58); /* Dark */
+    selection-background-color: rgb(189, 147, 249); /* Dark */
+}
+
+QMenuBar {
+    background-color: transparent; /* Unified */
+}
+
+QMenuBar::item {
+    background-color: transparent; /* Unified */
+    padding: 5px 10px; /* Unified */
+}
+
+QMenuBar::item:selected {
+    background-color: rgb(57, 65, 80); /* Dark */
+    border-radius: 4px; /* Unified */
+}
+
+QMenu {
+    background-color: rgb(33, 37, 43); /* Dark */
+    border: 1px solid rgb(44, 49, 58); /* Dark */
+    border-radius: 8px; /* Unified */
+}
+
+QMenu::item:selected {
+    background-color: rgb(189, 147, 249); /* Dark */
+}
+
+QStatusBar {
+    background-color: rgb(44, 49, 58); /* Dark */
+}
+
+QDockWidget {
+    border-radius: 8px; /* Unified */
+}
+
+QDockWidget::title {
+    background-color: rgb(33, 37, 43); /* Dark */
+    text-align: center; /* Unified */
+    padding: 5px; /* Unified */
+    border-radius: 8px; /* Unified */
+}
+
+QGroupBox {
+    border: 1px solid rgb(52, 59, 72);
+    border-radius: 8px; /* Unified */
+    margin-top: 10px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 0 3px;
+    background-color: rgb(40, 44, 52);
+}

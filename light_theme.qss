@@ -1,0 +1,130 @@
+/* Light Glassmorphism Theme for GScapy */
+
+QWidget {
+    background-color: #f0f0f0;
+    color: #333;
+    font: 10pt 'Segoe UI', Arial, sans-serif;
+}
+
+QMainWindow {
+    background-color: #f0f0f0;
+}
+
+/* Use a background image for the main window for a more textured look */
+QMainWindow, QDockWidget {
+    background-position: center;
+}
+
+
+QTabWidget::pane {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.6); /* Semi-transparent background */
+}
+
+QTabBar::tab {
+    background-color: rgba(220, 220, 220, 0.5);
+    padding: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: none;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+QTabBar::tab:selected {
+    background-color: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid #fff;
+}
+
+QPlainTextEdit, QTreeWidget, QListWidget, QLineEdit, QFrame, QTextEdit, QScrollArea {
+    background-color: rgba(255, 255, 255, 0.75);
+    color: #333;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    padding: 5px;
+}
+
+QTreeWidget::item:selected, QListWidget::item:selected {
+    background-color: rgba(0, 120, 215, 0.3);
+}
+
+QHeaderView::section {
+    background-color: rgba(220, 220, 220, 0.8);
+    padding: 5px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 0px;
+}
+
+QPushButton {
+    background-color: rgba(225, 225, 225, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    padding: 8px;
+    border-radius: 8px;
+    min-width: 80px;
+}
+
+QPushButton:hover {
+    background-color: rgba(235, 235, 235, 0.8);
+}
+
+QPushButton:pressed {
+    background-color: rgba(200, 200, 200, 0.9);
+}
+
+QComboBox {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 5px;
+    border-radius: 8px;
+    background-color: rgba(225, 225, 225, 0.7);
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    selection-background-color: #0078d7;
+}
+
+
+QMenuBar {
+    background-color: transparent;
+}
+
+QMenuBar::item {
+    background-color: transparent;
+    padding: 5px 10px;
+}
+
+QMenuBar::item:selected {
+    background-color: rgba(0, 120, 215, 0.2);
+    border-radius: 4px;
+}
+
+QMenu {
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+QMenu::item:selected {
+    background-color: rgba(0, 120, 215, 0.3);
+}
+
+QStatusBar {
+    background-color: rgba(220, 220, 220, 0.8);
+}
+
+QDockWidget {
+    border-radius: 8px;
+}
+
+QDockWidget::title {
+    background-color: rgba(220, 220, 220, 0.7);
+    text-align: center;
+    padding: 5px;
+    border-radius: 8px;
+}

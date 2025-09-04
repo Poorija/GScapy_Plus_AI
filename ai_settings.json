@@ -1,0 +1,32 @@
+{
+    "provider_tab_index": 0,
+    "local_ai": {
+        "endpoint": "http://localhost:11434/api/chat",
+        "model": "deepseek-r1:14b"
+    },
+    "online_ai": {
+        "selected_provider_index": 0,
+        "OpenAI": {
+            "api_key": "",
+            "model": ""
+        },
+        "Gemini": {
+            "api_key": "",
+            "model": ""
+        },
+        "Grok": {
+            "api_key": "",
+            "model": ""
+        },
+        "DeepSeek": {
+            "api_key": "",
+            "model": ""
+        },
+        "Qwen": {
+            "api_key": "",
+            "model": ""
+        }
+    },
+    "active_provider": "local_ai",
+    "active_model": "deepseek-r1:14b"
+}
