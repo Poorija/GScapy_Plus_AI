@@ -743,6 +743,32 @@ class GScapy(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
 
+        # Apply a global stylesheet for a more modern, "curvy" look
+        self.setStyleSheet("""
+            QGroupBox {
+                font-size: 11pt;
+                border: 1px solid #444;
+                border-radius: 8px;
+                margin-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px;
+                left: 10px;
+            }
+            QFrame#controlPanel {
+                border: 1px solid #444;
+                border-radius: 8px;
+            }
+            QTextEdit {
+                border-radius: 4px;
+            }
+            QPlainTextEdit {
+                border-radius: 4px;
+            }
+        """)
+
         self._create_resource_bar()
         self._create_menu_bar(); self._create_status_bar(); self._create_header_bar()
         self._create_main_tabs(); self._create_log_panel(); self._setup_logging()
@@ -1058,7 +1084,6 @@ class GScapy(QMainWindow):
         # --- Control Panel ---
         control_panel = QFrame()
         control_panel.setObjectName("controlPanel")
-        control_panel.setStyleSheet("#controlPanel { border: 1px solid #444; border-radius: 8px; }")
         control_layout = QHBoxLayout(control_panel)
         control_layout.setContentsMargins(10, 10, 10, 10)
         control_layout.setSpacing(10)
