@@ -2,13 +2,17 @@ import sys
 import os
 import logging
 import asyncio
-from typing import List
+import json
+from typing import List, Optional, Dict, Any, AsyncGenerator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from gscapy_web.core.nmap_scanner import run_nmap_scan
 from gscapy_web.core.arp_scanner import run_arp_scan
+from gscapy_web.core.port_scanner import scan_ports
+from gscapy_web.core.ping_sweeper import run_ping_sweep
+from gscapy_web.core.traceroute import run_traceroute
 from gscapy_web.core.ai_analyzer import stream_ai_analysis, get_ai_settings
 from fastapi.responses import StreamingResponse
 
@@ -41,14 +45,44 @@ class ArpHost(BaseModel):
     mac: str
     vendor: str
 
+class PortScanRequest(BaseModel):
+    target: str
+    ports: str
+    scan_type: str = "TCP SYN Scan"
+    timeout: int = 1
+    use_fragments: bool = False
+
+class PortScanResult(BaseModel):
+    port: int
+    protocol: str
+    state: str
+    service: str
+
+class PingSweepRequest(BaseModel):
+    target_network: str
+    probe_type: str = "ICMP Echo"
+    ports: Optional[str] = "80,443"
+    timeout: int = 1
+    num_threads: int = 20
+
+class PingSweepResult(BaseModel):
+    ip: str
+    status: str
+
+class TracerouteRequest(BaseModel):
+    target: str
+    max_hops: int = 30
+    timeout: int = 2
+
 # --- Helper Functions ---
 
-async def run_scan_async(func, *args):
+async def run_scan_async(func, *args, **kwargs):
     """
     Asynchronous wrapper for any blocking scan function.
+    Supports both positional and keyword arguments.
     """
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, func, *args)
+    return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 
 # --- API Endpoints ---
@@ -97,6 +131,108 @@ async def perform_arp_scan(request: ArpScanRequest):
         logging.error(f"An error occurred during the ARP scan API call: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
 
+@app.post("/api/port_scan", response_model=List[PortScanResult])
+async def perform_port_scan(request: PortScanRequest):
+    """
+    Performs a Scapy-based port scan on the specified target.
+    """
+    if not request.target:
+        raise HTTPException(status_code=400, detail="Target is a required field.")
+    if not request.ports:
+        raise HTTPException(status_code=400, detail="Ports are a required field.")
+
+    logging.info(f"API received port scan request for target: {request.target} on ports {request.ports}")
+
+    try:
+        results = await run_scan_async(
+            scan_ports,
+            request.target,
+            request.ports,
+            scan_type=request.scan_type,
+            timeout=request.timeout,
+            use_fragments=request.use_fragments
+        )
+        return results
+    except Exception as e:
+        logging.error(f"An error occurred during the port scan API call: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
+
+@app.post("/api/ping_sweep", response_model=List[PingSweepResult])
+async def perform_ping_sweep(request: PingSweepRequest):
+    """
+    Performs a ping sweep to discover active hosts on a network.
+    """
+    if not request.target_network:
+        raise HTTPException(status_code=400, detail="Target network is a required field.")
+
+    logging.info(f"API received ping sweep request for network: {request.target_network}")
+
+    ports_list = []
+    if request.ports:
+        try:
+            ports_list = [int(p.strip()) for p in request.ports.split(',')]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid format for ports. Must be comma-separated integers.")
+
+    try:
+        results = await run_scan_async(
+            run_ping_sweep,
+            target_network=request.target_network,
+            probe_type=request.probe_type,
+            ports=ports_list,
+            timeout=request.timeout,
+            num_threads=request.num_threads
+        )
+        return results
+    except Exception as e:
+        logging.error(f"An error occurred during the ping sweep API call: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
+
+@app.post("/api/traceroute")
+async def stream_traceroute(req: TracerouteRequest, http_request: Request):
+    """
+    Performs a traceroute and streams the results back to the client.
+    """
+    if not req.target:
+        raise HTTPException(status_code=400, detail="Target is a required field.")
+
+    logging.info(f"API received traceroute request for target: {req.target}")
+
+    async def event_generator():
+        # Running the blocking generator in an executor is complex.
+        # A simpler way for this use case is to create a queue and a separate
+        # thread to populate it, which the async generator can then read from.
+        q = asyncio.Queue()
+
+        def traceroute_thread():
+            try:
+                for hop_result in run_traceroute(req.target, req.max_hops, req.timeout):
+                    q.put_nowait(hop_result)
+            except Exception as e:
+                logging.error(f"Error in traceroute thread: {e}", exc_info=True)
+                q.put_nowait({"type": "error", "message": str(e)})
+            finally:
+                q.put_nowait(None) # Signal completion
+
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, traceroute_thread)
+
+        while True:
+            # Check if the client has disconnected
+            if await http_request.is_disconnected():
+                logging.warning("Client disconnected from traceroute stream.")
+                break
+
+            result = await q.get()
+            if result is None:
+                break
+
+            # SSE format: data: <json_string>\n\n
+            yield f"data: {json.dumps(result)}\n\n"
+            await asyncio.sleep(0.01) # Small sleep to yield control
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 # --- AI Assistant Endpoint ---
 
@@ -114,12 +250,6 @@ async def ai_response_generator(prompt: str):
             yield "Error: AI settings are not configured or failed to load."
             return
 
-        # The stream_ai_analysis function is a generator. We need to adapt it for async.
-        # Running a generator in an executor is tricky. A better way is to make the core function async
-        # or use a thread-safe queue. For now, we'll collect the chunks in the executor.
-
-        # This is a simplified approach. A true async implementation of the core
-        # function would be better.
         for chunk in stream_ai_analysis(prompt, settings):
             yield chunk
             await asyncio.sleep(0.01) # Yield control to the event loop

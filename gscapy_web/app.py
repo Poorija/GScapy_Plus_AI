@@ -55,6 +55,176 @@ with st.expander("Run Nmap Scan", expanded=True):
                 except Exception as e:
                     st.error(f"An unexpected error occurred: {e}")
 
+# --- ARP Scanner Tool ---
+st.header("ARP Scanner")
+
+with st.expander("Run ARP Scan"):
+    arp_target = st.text_input("Enter Target Network", "192.168.1.0/24", key="arp_target", help="e.g., 192.168.1.0/24")
+
+    if st.button("Run ARP Scan"):
+        if not arp_target:
+            st.error("Target network is a required field.")
+        else:
+            with st.spinner(f"Running ARP scan on {arp_target}..."):
+                try:
+                    payload = {"target_network": arp_target}
+                    response = requests.post(f"{API_BASE_URL}/api/arp", json=payload, timeout=60)
+
+                    if response.status_code == 200:
+                        st.success("ARP scan completed!")
+                        results = response.json()
+                        if results:
+                            st.subheader("Discovered Hosts")
+                            df = pd.DataFrame(results)
+                            st.dataframe(df, use_container_width=True)
+                        else:
+                            st.info("No hosts responded to the ARP scan.")
+                    else:
+                        st.error(f"Error from API: {response.status_code}")
+                        st.json(response.json())
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Failed to connect to the backend API: {e}")
+                except Exception as e:
+                    st.error(f"An unexpected error occurred: {e}")
+
+# --- Port Scanner Tool (Scapy) ---
+st.header("Port Scanner (Scapy)")
+
+with st.expander("Run Port Scan"):
+    ps_target = st.text_input("Enter Target IP", "127.0.0.1", key="ps_target")
+    ps_ports = st.text_input("Ports", "22,80,443", help="e.g., 22,80,443,1000-2000", key="ps_ports")
+    ps_scan_type = st.selectbox(
+        "Scan Type",
+        options=["TCP SYN Scan", "TCP FIN Scan", "TCP Xmas Scan", "TCP Null Scan", "TCP ACK Scan", "UDP Scan"],
+        key="ps_scan_type"
+    )
+
+    if st.button("Run Port Scan"):
+        if not ps_target:
+            st.error("Target is a required field.")
+        elif not ps_ports:
+            st.error("Ports are a required field.")
+        else:
+            with st.spinner(f"Running {ps_scan_type} on {ps_target}..."):
+                try:
+                    payload = {
+                        "target": ps_target,
+                        "ports": ps_ports,
+                        "scan_type": ps_scan_type
+                    }
+                    response = requests.post(f"{API_BASE_URL}/api/port_scan", json=payload, timeout=180)
+
+                    if response.status_code == 200:
+                        st.success("Port scan completed!")
+                        results = response.json()
+                        if results:
+                            st.subheader("Scan Results")
+                            df = pd.DataFrame(results)
+                            # Reorder columns for better readability
+                            df = df[['port', 'protocol', 'state', 'service']]
+                            st.dataframe(df, use_container_width=True)
+                        else:
+                            st.info("No ports responded or were found with the specified criteria.")
+                    else:
+                        st.error(f"Error from API: {response.status_code}")
+                        st.json(response.json())
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Failed to connect to the backend API: {e}")
+                except Exception as e:
+                    st.error(f"An unexpected error occurred: {e}")
+
+# --- Ping Sweep Tool ---
+st.header("Ping Sweep")
+
+with st.expander("Run Ping Sweep"):
+    sweep_target = st.text_input("Enter Target Network (CIDR)", "192.168.1.0/24", key="sweep_target")
+    sweep_probe_type = st.selectbox(
+        "Probe Type",
+        options=["ICMP Echo", "TCP SYN", "TCP ACK", "UDP Probe"],
+        key="sweep_probe_type"
+    )
+
+    # Conditionally show the ports input
+    if "TCP" in sweep_probe_type or "UDP" in sweep_probe_type:
+        sweep_ports = st.text_input("Target Port(s)", "80,443", key="sweep_ports", help="e.g., 22,80,443")
+    else:
+        sweep_ports = ""
+
+    if st.button("Run Ping Sweep"):
+        if not sweep_target:
+            st.error("Target network is a required field.")
+        else:
+            with st.spinner(f"Running Ping Sweep on {sweep_target}..."):
+                try:
+                    payload = {
+                        "target_network": sweep_target,
+                        "probe_type": sweep_probe_type,
+                        "ports": sweep_ports if sweep_ports else None
+                    }
+                    response = requests.post(f"{API_BASE_URL}/api/ping_sweep", json=payload, timeout=180)
+
+                    if response.status_code == 200:
+                        st.success("Ping Sweep completed!")
+                        results = response.json()
+                        if results:
+                            st.subheader("Active Hosts Found")
+                            df = pd.DataFrame(results)
+                            st.dataframe(df, use_container_width=True)
+                        else:
+                            st.info("No active hosts found.")
+                    else:
+                        st.error(f"Error from API: {response.status_code}")
+                        st.json(response.json())
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Failed to connect to the backend API: {e}")
+                except Exception as e:
+                    st.error(f"An unexpected error occurred: {e}")
+
+# --- Traceroute Tool ---
+st.header("Traceroute")
+with st.expander("Run Traceroute"):
+    trace_target = st.text_input("Enter Target IP or Domain", "google.com", key="trace_target")
+    if st.button("Run Traceroute"):
+        if not trace_target:
+            st.error("Target is a required field.")
+        else:
+            st.subheader(f"Traceroute Results for {trace_target}")
+            status_text = st.empty()
+            results_placeholder = st.empty()
+            hop_data = []
+
+            try:
+                payload = {"target": trace_target}
+                with requests.post(f"{API_BASE_URL}/api/traceroute", json=payload, stream=True, timeout=180) as r:
+                    r.raise_for_status()
+                    for line in r.iter_lines(decode_unicode=True):
+                        if line.startswith("data:"):
+                            try:
+                                data_str = line.split("data:", 1)[1].strip()
+                                data = json.loads(data_str)
+
+                                if data.get("type") == "hop":
+                                    hop_data.append(data["data"])
+                                    df = pd.DataFrame(hop_data)
+                                    df = df.rename(columns={
+                                        'hop': 'Hop', 'ip': 'IP Address',
+                                        'hostname': 'Hostname', 'rtt_ms': 'RTT (ms)'
+                                    })
+                                    results_placeholder.dataframe(df, use_container_width=True)
+                                elif data.get("type") == "status":
+                                    status_text.info(data["message"])
+                                elif data.get("type") == "error":
+                                    status_text.error(data["message"])
+
+                            except json.JSONDecodeError:
+                                st.warning(f"Received malformed data from stream: {line}")
+
+            except requests.exceptions.RequestException as e:
+                st.error(f"Failed to connect to the backend API: {e}")
+            except Exception as e:
+                st.error(f"An unexpected error occurred: {e}")
+
+
 # --- AI Assistant ---
 st.header("AI Assistant")
 
@@ -96,35 +266,3 @@ if prompt := st.chat_input("What can I help you with?"):
 
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-# --- ARP Scanner Tool ---
-st.header("ARP Scanner")
-
-with st.expander("Run ARP Scan"):
-    arp_target = st.text_input("Enter Target Network", "192.168.1.0/24", key="arp_target", help="e.g., 192.168.1.0/24")
-
-    if st.button("Run ARP Scan"):
-        if not arp_target:
-            st.error("Target network is a required field.")
-        else:
-            with st.spinner(f"Running ARP scan on {arp_target}..."):
-                try:
-                    payload = {"target_network": arp_target}
-                    response = requests.post(f"{API_BASE_URL}/api/arp", json=payload, timeout=60)
-
-                    if response.status_code == 200:
-                        st.success("ARP scan completed!")
-                        results = response.json()
-                        if results:
-                            st.subheader("Discovered Hosts")
-                            df = pd.DataFrame(results)
-                            st.dataframe(df, use_container_width=True)
-                        else:
-                            st.info("No hosts responded to the ARP scan.")
-                    else:
-                        st.error(f"Error from API: {response.status_code}")
-                        st.json(response.json())
-                except requests.exceptions.RequestException as e:
-                    st.error(f"Failed to connect to the backend API: {e}")
-                except Exception as e:
-                    st.error(f"An unexpected error occurred: {e}")
