@@ -19,6 +19,12 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel,
                              QLineEdit, QCheckBox, QFrame, QMenu, QTextEdit,
                              QGroupBox, QTextBrowser, QDialog, QFormLayout,
                              QInputDialog, QTreeWidgetItemIterator)
+try:
+    from lxml import etree
+except ImportError:
+    etree = None
+    logging.warning("LXML not found, AI analysis for Nmap XML will be basic.")
+
 
 # This function is used by the AI tab, so it's moved here.
 def create_themed_icon(icon_path, color_str):
@@ -166,30 +172,35 @@ class ThinkingWidget(QWidget):
 
 
 class ChatBubble(QWidget):
+    """A custom widget that displays text in a chat bubble, handling dynamic resizing."""
     # Signal to notify the container that the size hint has changed
-    sizeHintChanged = pyqtSignal(QSize)
+    sizeHintChanged = pyqtSignal()
 
     def __init__(self, text, is_user, is_streaming=False, parent=None):
         super().__init__(parent)
         self.is_user = is_user
         self.is_streaming = is_streaming
+        self.text_edit = QTextEdit(self)
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setMarkdown(text)
+        self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.text_edit.document().contentsChanged.connect(self.on_contents_changed)
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
-        self.label = QLabel(text)
-        self.label.setWordWrap(True)
-        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.label.setOpenExternalLinks(True)
-
-        self.layout.addWidget(self.label)
+        self.layout.addWidget(self.text_edit)
         self.set_stylesheet()
 
     def set_stylesheet(self):
-        # Modernized chat bubble styles inspired by ChatGPT/Gemini
+        # Common styles for the QTextEdit
+        self.text_edit.setStyleSheet("QTextEdit { border: none; background-color: transparent; }")
+
+        # Container styles for the bubble appearance
         if self.is_user:
             padding = "10px 14px 10px 14px"
-            self.label.setStyleSheet(f"""
-                QLabel {{
+            self.setStyleSheet(f"""
+                ChatBubble {{
                     background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
                                                     stop: 0 #2a8afc, stop: 1 #0a6dcf);
                     color: white;
@@ -201,9 +212,9 @@ class ChatBubble(QWidget):
             self.layout.setAlignment(Qt.AlignmentFlag.AlignRight)
         else:
             padding = "10px 14px 10px 14px"
-            bg_color = "#f0f0f0" # Consistent background for AI messages
-            self.label.setStyleSheet(f"""
-                QLabel {{
+            bg_color = "#f0f0f0"
+            self.setStyleSheet(f"""
+                ChatBubble {{
                     background-color: {bg_color};
                     color: #202020;
                     padding: {padding};
@@ -213,22 +224,33 @@ class ChatBubble(QWidget):
             """)
             self.layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
+        # Set text color based on bubble type
+        text_color = "white" if self.is_user else "#202020"
+        self.text_edit.setStyleSheet(f"QTextEdit {{ border: none; background-color: transparent; color: {text_color}; }}")
+
+
     def append_text(self, text_chunk):
-        self.label.setText(self.label.text() + text_chunk)
-        # After changing text, emit the signal with the new size hint
-        self.sizeHintChanged.emit(self.sizeHint())
+        current_text = self.text_edit.toPlainText()
+        self.text_edit.setMarkdown(current_text + text_chunk)
 
     def finish_streaming(self):
         self.is_streaming = False
-        self.set_stylesheet()
+
+    def on_contents_changed(self):
+        # Adjust the height of the text_edit to fit its content
+        doc_height = self.text_edit.document().size().height()
+        self.text_edit.setFixedHeight(int(doc_height))
+        self.updateGeometry()
+        self.sizeHintChanged.emit() # Signal that the overall widget size has changed
 
     def sizeHint(self):
-        # Override sizeHint to provide an accurate size based on wrapped text.
-        if self.parentWidget():
-            # Use a percentage of the parent's width for the max width of the bubble
-            width = int(self.parentWidget().width() * 0.75)
-            self.label.setFixedWidth(width)
-        return self.label.sizeHint()
+        # Override sizeHint to provide an accurate size based on content.
+        # The width is constrained by the parent, and height is dynamic.
+        parent_width = self.parent().width() if self.parent() else 800
+        max_bubble_width = int(parent_width * 0.75)
+
+        # Calculate the ideal size without setting a fixed width on the widget itself
+        return QSize(max_bubble_width, self.text_edit.height())
 
 
 class AIAssistantTab(QWidget):
@@ -415,11 +437,21 @@ class AIAssistantTab(QWidget):
 
     def update_theme(self):
         """Updates the icon color to match the new theme."""
-        # Use fixed colors for icons for a more consistent, modern look
-        self.ai_settings_btn.setIcon(create_themed_icon(os.path.join("icons", "gear.svg"), "#505050"))
+        # Get the current theme's text color to make the icon theme-aware
+        try:
+            palette = self.palette()
+            text_color = palette.color(QPalette.ColorRole.Text)
+            icon_color_str = text_color.name()
+        except Exception:
+            icon_color_str = "#505050" # Fallback color
+
+        self.ai_settings_btn.setIcon(create_themed_icon(os.path.join("icons", "gear.svg"), icon_color_str))
         self.ai_settings_btn.setIconSize(QSize(28, 28))
+
+        # The send button icon should always be white as it's on a solid color background
         self.send_button.setIcon(create_themed_icon(os.path.join("icons", "paper-airplane.svg"), "#ffffff"))
         self.send_button.setIconSize(QSize(24, 24))
+
         # Style the send button to be more prominent
         self.send_button.setStyleSheet("""
             QPushButton {
@@ -488,18 +520,18 @@ class AIAssistantTab(QWidget):
                 self.user_input.setFocus() # Focus the input field
 
     def _add_chat_bubble(self, message, is_user):
-        item = QListWidgetItem(self.chat_list)
-        # Important: Parent the bubble to the list view for correct styling and sizing
         bubble = ChatBubble(message, is_user, parent=self.chat_list)
+        item = QListWidgetItem(self.chat_list)
 
-        # Add the item to the list and set the custom widget for it.
-        self.chat_list.addItem(item)
-        self.chat_list.setItemWidget(item, bubble)
+        # This is the key fix: connect the bubble's size change signal
+        # to a lambda that updates the QListWidgetItem's size hint.
+        bubble.sizeHintChanged.connect(lambda: item.setSizeHint(bubble.sizeHint()))
 
-        # Set the size hint now that the widget is integrated
+        # Set initial size hint
         item.setSizeHint(bubble.sizeHint())
 
-        # Ensure the view scrolls to the new message
+        self.chat_list.addItem(item)
+        self.chat_list.setItemWidget(item, bubble)
         self.chat_list.scrollToBottom()
 
     def _show_typing_indicator(self, show=True):
@@ -543,14 +575,20 @@ class AIAssistantTab(QWidget):
                  self.thinking_widget.toggle_content()
 
             if self.current_ai_bubble is None:
-                item = QListWidgetItem(self.chat_list)
+                # Create the bubble and the list item that will hold it
                 self.current_ai_bubble = ChatBubble("", is_user=False, is_streaming=True, parent=self.chat_list)
-                self.current_ai_bubble.sizeHintChanged.connect(item.setSizeHint)
+                item = QListWidgetItem(self.chat_list)
+
+                # Connect the signal to the slot
+                self.current_ai_bubble.sizeHintChanged.connect(lambda: item.setSizeHint(self.current_ai_bubble.sizeHint()))
+
+                # Set initial size and add to the list
                 item.setSizeHint(self.current_ai_bubble.sizeHint())
                 self.chat_list.addItem(item)
                 self.chat_list.setItemWidget(item, self.current_ai_bubble)
 
             self.current_ai_bubble.append_text(chunk)
+            # Continually scroll to the bottom as new content is added
             self.chat_list.scrollToBottom()
 
     def on_ai_thread_finished(self):
@@ -572,7 +610,7 @@ class AIAssistantTab(QWidget):
         formatted_results, header = "", ""
         if tool_name == "nmap":
             header = f"Nmap scan results for target: {context}"
-            if results_data:
+            if results_data and etree:
                 try:
                     # A more robust parsing of Nmap XML for the AI prompt
                     root = etree.fromstring(results_data.encode('utf-8'))
@@ -589,7 +627,7 @@ class AIAssistantTab(QWidget):
                     # Fallback to just sending the raw XML if parsing fails
                     formatted_results = results_data
             else:
-                formatted_results = "No Nmap XML data available."
+                formatted_results = "No Nmap XML data available or LXML not installed."
 
         elif tool_name == "subdomain":
             header = f"Subdomain scan for: {context}"
@@ -673,17 +711,24 @@ class AIAssistantTab(QWidget):
                     provider_group.addAction(action)
                     online_menu.addAction(action)
         else:
-            no_online_action = QAction("No Online Services Configured")
-            no_online_action.setEnabled(False)
+            # Guide the user to the settings if no online services are set up.
+            no_online_action = QAction("Configure Online Services...")
+            no_online_action.triggered.connect(self._open_settings_to_online_tab)
             menu.addAction(no_online_action)
 
         menu.addSeparator()
         settings_action = QAction("Advanced Settings...", self)
-        settings_action.triggered.connect(self.parent._show_ai_settings_dialog)
+        settings_action.setToolTip("Open the full settings dialog to add or edit AI provider configurations.")
+        settings_action.triggered.connect(lambda: self.parent._show_ai_settings_dialog(start_tab_index=0))
         settings_action.setIcon(QIcon(os.path.join("icons", "gear.svg")))
         menu.addAction(settings_action)
 
         menu.exec(self.ai_settings_btn.mapToGlobal(QPoint(0, -menu.sizeHint().height() - 5)))
+
+    def _open_settings_to_online_tab(self):
+        """Opens the settings dialog and switches to the online services tab."""
+        # The parent method now supports opening to a specific tab index.
+        self.parent._show_ai_settings_dialog(start_tab_index=1)
 
     def _set_active_ai_provider(self, provider, model):
         settings_file = "ai_settings.json"
@@ -862,6 +907,9 @@ class AISettingsDialog(QDialog):
                 test_button.clicked.connect(lambda checked, p=provider_name: self._test_api_connection(p))
             else:
                 test_button.setEnabled(False)
+                test_button.setToolTip("Connection test for this provider is not yet implemented.")
+                test_button.setToolTip("Connection test for this provider is not yet implemented.")
+
 
             provider_layout.addRow(f"{provider_name} API Key:", api_key_edit)
             provider_layout.addRow("Model Name:", model_edit)
@@ -1052,56 +1100,6 @@ class AISettingsDialog(QDialog):
         QMessageBox.warning(self, "Connection Failed", message)
 
 
-class FetchModelsThread(QThread):
-    """A dedicated thread to fetch AI models from an endpoint."""
-    models_fetched = pyqtSignal(list)
-    models_error = pyqtSignal(str)
-
-    def __init__(self, url, parent=None):
-        super().__init__(parent)
-        self.url = url
-
-    def run(self):
-        try:
-            import requests
-            response = requests.get(self.url, timeout=5)
-            response.raise_for_status()
-            data = response.json()
-            model_names = [model['name'] for model in data.get('models', [])]
-            self.models_fetched.emit(model_names)
-        except Exception as e:
-            self.models_error.emit(str(e))
-
-
-class TestAPIThread(QThread):
-    """A dedicated thread to test an API connection."""
-    success = pyqtSignal(str)
-    error = pyqtSignal(str)
-
-    def __init__(self, provider, api_key, parent=None):
-        super().__init__(parent)
-        self.provider = provider
-        self.api_key = api_key
-
-    def run(self):
-        try:
-            import requests
-            if self.provider == "OpenAI":
-                url = "https://api.openai.com/v1/models"
-                headers = {"Authorization": f"Bearer {self.api_key}"}
-                response = requests.get(url, headers=headers, timeout=10)
-                response.raise_for_status()
-                # Check if we got a list of models
-                if "data" in response.json():
-                    self.success.emit(f"Successfully connected to {self.provider} and authenticated.")
-                else:
-                    self.error.emit(f"Authentication with {self.provider} failed. The response was unexpected.")
-            else:
-                self.error.emit(f"Connection testing for {self.provider} is not yet implemented.")
-        except Exception as e:
-            self.error.emit(f"Failed to connect to {self.provider}: {e}")
-
-
 class AIGuideDialog(QDialog):
     """A dialog to show the user guide for AI features."""
     def __init__(self, parent=None):
@@ -1193,35 +1191,3 @@ class AIGuideDialog(QDialog):
         ok_button = QPushButton("OK")
         ok_button.clicked.connect(self.accept)
         layout.addWidget(ok_button, 0, Qt.AlignmentFlag.AlignRight)
-
-
-class AIAnalysisDialog(QDialog):
-    """A dialog to show the results of AI analysis."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("AI Analysis")
-        self.setMinimumSize(600, 400)
-
-        layout = QVBoxLayout(self)
-        self.results_text = QTextEdit("Analyzing... Please wait.")
-        self.results_text.setReadOnly(True)
-        layout.addWidget(self.results_text)
-
-        button_layout = QHBoxLayout()
-        copy_button = QPushButton("Copy to Clipboard")
-        copy_button.clicked.connect(self.copy_results)
-        ok_button = QPushButton("OK")
-        ok_button.clicked.connect(self.accept)
-        button_layout.addStretch()
-        button_layout.addWidget(copy_button)
-        button_layout.addWidget(ok_button)
-        layout.addLayout(button_layout)
-
-    def set_results(self, text):
-        self.results_text.setPlainText(text)
-
-    def set_error(self, text):
-        self.results_text.setPlainText(f"An error occurred:\n\n{text}")
-
-    def copy_results(self):
-        QApplication.clipboard().setText(self.results_text.toPlainText())

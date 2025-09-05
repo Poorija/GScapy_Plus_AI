@@ -32,7 +32,6 @@ import re
 from qt_material import apply_stylesheet, list_themes
 from PyQt6.QtGui import QActionGroup, QPixmap, QImage, QPalette
 
-
 def get_vendor(mac_address):
     """Retrieves the vendor for a given MAC address from an online API."""
     if not mac_address or mac_address == "N/A":
@@ -689,6 +688,7 @@ class NmapSummaryDialog(QDialog):
             logging.error(f"Failed to parse Nmap XML for summary: {e}", exc_info=True)
             self.tree.addTopLevelItem(QTreeWidgetItem(["Error parsing XML data."]))
 
+# --- Main Application ---
 
 # --- Main Application ---
 class GScapy(QMainWindow):
@@ -743,32 +743,6 @@ class GScapy(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
 
-        # Apply a global stylesheet for a more modern, "curvy" look
-        self.setStyleSheet("""
-            QGroupBox {
-                font-size: 11pt;
-                border: 1px solid #444;
-                border-radius: 8px;
-                margin-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 0 5px;
-                left: 10px;
-            }
-            QFrame#controlPanel {
-                border: 1px solid #444;
-                border-radius: 8px;
-            }
-            QTextEdit {
-                border-radius: 4px;
-            }
-            QPlainTextEdit {
-                border-radius: 4px;
-            }
-        """)
-
         self._create_resource_bar()
         self._create_menu_bar(); self._create_status_bar(); self._create_header_bar()
         self._create_main_tabs(); self._create_log_panel(); self._setup_logging()
@@ -803,10 +777,13 @@ class GScapy(QMainWindow):
         help_menu.addAction("&AI Settings...", self._show_ai_settings_dialog)
         help_menu.addAction("AI Guide", self._show_ai_guide_dialog)
 
-    def _show_ai_settings_dialog(self):
-        """Shows the AI settings dialog."""
+    def _show_ai_settings_dialog(self, start_tab_index=0):
+        """Shows the AI settings dialog, optionally starting on a specific tab."""
         dialog = AISettingsDialog(self)
+        if start_tab_index > 0 and start_tab_index < dialog.tab_widget.count():
+            dialog.tab_widget.setCurrentIndex(start_tab_index)
         dialog.exec()
+        return dialog
     def _show_ai_guide_dialog(self):
         """Shows the AI features user guide."""
         dialog = AIGuideDialog(self)
@@ -1084,6 +1061,7 @@ class GScapy(QMainWindow):
         # --- Control Panel ---
         control_panel = QFrame()
         control_panel.setObjectName("controlPanel")
+        control_panel.setStyleSheet("#controlPanel { border: 1px solid #444; border-radius: 8px; }")
         control_layout = QHBoxLayout(control_panel)
         control_layout.setContentsMargins(10, 10, 10, 10)
         control_layout.setSpacing(10)

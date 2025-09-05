@@ -1,0 +1,4 @@
+2025-09-04 17:17:25,003 - MainThread - INFO - GScapy application initialized.
+2025-09-04 17:17:38,809 - MainThread - INFO - AI Provider set to local_ai (deepseek-r1:14b)
+2025-09-04 17:18:49,770 - MainThread - INFO - User confirmed exit. Stopping background threads.
+2025-09-04 17:18:49,771 - MainThread - INFO - GScapy application closing.

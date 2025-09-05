@@ -10,6 +10,3 @@ python-docx
 qt-material
 dnspython
 requests
-fastapi
-uvicorn[standard]
-streamlit
