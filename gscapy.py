@@ -32,6 +32,8 @@ import re
 from qt_material import apply_stylesheet, list_themes
 from PyQt6.QtGui import QActionGroup, QPixmap, QImage, QPalette
 
+from ai_assistant_gui import AIAssistantTab
+
 def get_vendor(mac_address):
     """Retrieves the vendor for a given MAC address from an online API."""
     if not mac_address or mac_address == "N/A":
@@ -62,8 +64,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QSequentialAnimationGroup, QPoint, QSize
 from PyQt6.QtGui import QAction, QIcon, QFont, QTextCursor, QActionGroup
-
-from ai_tab import AIAssistantTab, AISettingsDialog, AIGuideDialog
 
 
 def sniffer_process_target(queue, iface, bpf_filter):
@@ -777,13 +777,10 @@ class GScapy(QMainWindow):
         help_menu.addAction("&AI Settings...", self._show_ai_settings_dialog)
         help_menu.addAction("AI Guide", self._show_ai_guide_dialog)
 
-    def _show_ai_settings_dialog(self, start_tab_index=0):
-        """Shows the AI settings dialog, optionally starting on a specific tab."""
+    def _show_ai_settings_dialog(self):
+        """Shows the AI settings dialog."""
         dialog = AISettingsDialog(self)
-        if start_tab_index > 0 and start_tab_index < dialog.tab_widget.count():
-            dialog.tab_widget.setCurrentIndex(start_tab_index)
-        dialog.exec()
-        return dialog
+        return dialog.exec()
     def _show_ai_guide_dialog(self):
         """Shows the AI features user guide."""
         dialog = AIGuideDialog(self)
