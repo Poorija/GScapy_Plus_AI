@@ -591,8 +591,17 @@ class ChatBubble(QFrame):
 
     def on_contents_changed(self):
         """Adjusts the height of the widget to match the text content."""
-        # Let the layout system handle the height automatically.
-        # We just need to ensure the item's size hint is updated.
+        # Get the required height of the text content from the document
+        doc_height = self.text_browser.document().size().height()
+
+        # Set the minimum height of the text browser itself.
+        # This forces the layout to acknowledge the new vertical space requirement.
+        # The extra margin provides a little vertical padding inside the bubble.
+        self.text_browser.setMinimumHeight(int(doc_height) + 10)
+
+        # Now that the inner widget has a new minimum size, the wrapper's
+        # size hint will have been updated by the layout system.
+        # We update the QListWidgetItem's size to match this new preferred size.
         if self.item_in_list:
             self.item_in_list.setSizeHint(self.wrapper.sizeHint())
 
