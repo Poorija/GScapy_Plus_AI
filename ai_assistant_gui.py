@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout,
     QDialog, QTabWidget, QLineEdit, QPushButton, QComboBox, QMessageBox,
     QInputDialog, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem,
-    QFrame, QMenu, QTextEdit, QTextBrowser, QGroupBox, QLabel, QSplitter
+    QFrame, QMenu, QTextEdit, QTextBrowser, QGroupBox, QLabel, QSplitter, QScrollArea
 )
 
 from ai_threads import FetchModelsThread, TestAPIThread, AIAnalysisThread
