@@ -561,14 +561,17 @@ class ChatBubble(QFrame):
 
         # The QTextBrowser handles text display, wrapping, and selection
         self.text_browser = QTextBrowser(self)
-        self.text_browser.setPlainText(text)
         self.text_browser.setReadOnly(True)
         self.text_browser.setOpenExternalLinks(True)
         self.text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # Connect contentsChanged to automatically adjust height
+        # IMPORTANT: Connect the signal BEFORE setting the text.
         self.text_browser.document().contentsChanged.connect(self.on_contents_changed)
+
+        # Now set the text, which will trigger the on_contents_changed signal
+        # for the first time, ensuring correct initial sizing.
+        self.text_browser.setPlainText(text)
 
         # Set a max width for the bubble
         if parent:
@@ -587,9 +590,6 @@ class ChatBubble(QFrame):
 
         self.layout.addWidget(self.text_browser)
         self.set_stylesheet()
-
-        # Trigger initial resize
-        self.on_contents_changed()
 
     def on_contents_changed(self):
         """Adjusts the height of the widget to match the text content."""
