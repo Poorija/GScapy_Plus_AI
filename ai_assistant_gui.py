@@ -591,10 +591,15 @@ class ChatBubble(QFrame):
         self.layout.addWidget(self.text_browser)
         self.set_stylesheet()
 
+        # On the off-chance the initial text is empty, the signal might not fire.
+        # Call it once manually to ensure a minimum size is set.
+        self.on_contents_changed()
+
     def on_contents_changed(self):
         """Adjusts the height of the widget to match the text content."""
         doc_height = self.text_browser.document().size().height()
-        self.text_browser.setFixedHeight(int(doc_height) + 10)
+        # Add a small buffer for padding
+        self.text_browser.setFixedHeight(int(doc_height) + 15)
 
     def set_stylesheet(self):
         """Sets the stylesheet using the application's palette for theme-awareness."""
