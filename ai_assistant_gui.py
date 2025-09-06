@@ -554,11 +554,10 @@ class ChatBubble(QFrame):
     def __init__(self, text, is_user, parent=None):
         super().__init__(parent)
         self.is_user = is_user
-        self.item_in_list = None # To hold the QListWidgetItem
 
         # Main layout for the bubble
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(1, 1, 1, 1) # Minimal margins, handled by text browser
+        self.layout.setContentsMargins(1, 1, 1, 1)
 
         # The QTextBrowser handles text display, wrapping, and selection
         self.text_browser = QTextBrowser(self)
@@ -567,9 +566,6 @@ class ChatBubble(QFrame):
         self.text_browser.setOpenExternalLinks(True)
         self.text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-        # Connect contentsChanged to automatically adjust height
-        self.text_browser.document().contentsChanged.connect(self.on_contents_changed)
 
         # Set a max width for the bubble
         if parent:
@@ -588,22 +584,6 @@ class ChatBubble(QFrame):
 
         self.layout.addWidget(self.text_browser)
         self.set_stylesheet()
-
-    def on_contents_changed(self):
-        """Adjusts the height of the widget to match the text content."""
-        # Get the required height of the text content from the document
-        doc_height = self.text_browser.document().size().height()
-
-        # Set the minimum height of the text browser itself.
-        # This forces the layout to acknowledge the new vertical space requirement.
-        # The extra margin provides a little vertical padding inside the bubble.
-        self.text_browser.setMinimumHeight(int(doc_height) + 10)
-
-        # Now that the inner widget has a new minimum size, the wrapper's
-        # size hint will have been updated by the layout system.
-        # We update the QListWidgetItem's size to match this new preferred size.
-        if self.item_in_list:
-            self.item_in_list.setSizeHint(self.wrapper.sizeHint())
 
     def set_stylesheet(self):
         """Sets the stylesheet using the application's palette for theme-awareness."""
@@ -760,12 +740,16 @@ class AIAssistantTab(QWidget):
         header.setStyleSheet("QTextBrowser { border: none; background: transparent; }")
         chat_layout.addWidget(header)
 
-        # Chat message list
-        self.chat_list = QListWidget(self)
-        self.chat_list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
-        self.chat_list.setStyleSheet("QListWidget { border: none; background-color: transparent; }")
-        self.chat_list.setSpacing(5) # Spacing between bubbles
-        chat_layout.addWidget(self.chat_list)
+        # Chat message area
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+
+        self.scroll_content_widget = QWidget()
+        self.chat_scroll_layout = QVBoxLayout(self.scroll_content_widget)
+        self.chat_scroll_layout.addStretch() # Pushes bubbles to the top
+        self.scroll_area.setWidget(self.scroll_content_widget)
+        chat_layout.addWidget(self.scroll_area)
 
         # Typing indicator
         self.typing_indicator = TypingIndicator(self)
@@ -868,25 +852,17 @@ class AIAssistantTab(QWidget):
 
     def _add_chat_bubble(self, message, is_user, is_streaming=False):
         # Create the bubble and its alignment wrapper
-        bubble = ChatBubble(message, is_user, parent=self.chat_list)
+        bubble = ChatBubble(message, is_user, parent=self.scroll_content_widget)
         bubble_wrapper = bubble.get_wrapper()
 
-        # Create a list item and associate the wrapper widget with it
-        item = QListWidgetItem(self.chat_list)
-        # Pass the item to the bubble so it can update its own size hint
-        bubble.item_in_list = item
-
-        # Set the initial size hint
-        item.setSizeHint(bubble_wrapper.sizeHint())
-
-        self.chat_list.addItem(item)
-        self.chat_list.setItemWidget(item, bubble_wrapper)
+        # Insert the new bubble before the stretch item
+        self.chat_scroll_layout.insertWidget(self.chat_scroll_layout.count() - 1, bubble_wrapper)
 
         # Scroll to the bottom to show the new message
-        QTimer.singleShot(50, self.chat_list.scrollToBottom)
+        QTimer.singleShot(50, self.scroll_area.verticalScrollBar().setValue, self.scroll_area.verticalScrollBar().maximum())
 
         if is_streaming:
-            return bubble # Return the bubble instance for streaming updates
+            return bubble
         return None
 
     def _show_typing_indicator(self, show=True):
@@ -918,30 +894,32 @@ class AIAssistantTab(QWidget):
 
     def handle_ai_response(self, chunk, is_thinking, is_final_answer_chunk):
         self._show_typing_indicator(False)
+
+        # Check scrollbar position BEFORE adding new content
+        scroll_bar = self.scroll_area.verticalScrollBar()
+        is_at_bottom = (scroll_bar.value() >= scroll_bar.maximum() - 10)
+
         if is_thinking:
             if not self.thinking_widget:
                 self.thinking_widget = ThinkingWidget()
-                item = QListWidgetItem(self.chat_list)
-                item.setSizeHint(self.thinking_widget.sizeHint())
-                self.chat_list.addItem(item)
-                self.chat_list.setItemWidget(item, self.thinking_widget)
-                self.thinking_widget.show()
+                self.chat_scroll_layout.insertWidget(self.chat_scroll_layout.count() - 1, self.thinking_widget)
             self.thinking_widget.append_text(chunk)
         else:
-            if self.thinking_widget and not self.thinking_widget.is_collapsed():
-                 self.thinking_widget.toggle_content()
-            if self.thinking_widget and not self.thinking_widget.is_collapsed():
-                 self.thinking_widget.toggle_content()
-                 self.thinking_widget.hide()
+            if self.thinking_widget:
+                # Hide and eventually delete the thinking widget once we get a real answer
+                self.thinking_widget.hide()
+                self.thinking_widget.deleteLater()
+                self.thinking_widget = None
 
             if self.current_ai_bubble is None:
-                # Create the streaming bubble for the AI's response
                 self.current_ai_bubble = self._add_chat_bubble("", is_user=False, is_streaming=True)
 
             if self.current_ai_bubble:
                 self.current_ai_bubble.append_text(chunk)
-                # Ensure the view scrolls to the bottom as new text is added
-                self.chat_list.scrollToBottom()
+
+        # Auto-scroll only if the user was already at the bottom
+        if is_at_bottom:
+            QTimer.singleShot(50, lambda: scroll_bar.setValue(scroll_bar.maximum()))
 
     def on_ai_thread_finished(self):
         self._show_typing_indicator(False)
