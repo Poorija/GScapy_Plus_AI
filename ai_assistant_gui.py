@@ -820,11 +820,10 @@ class AIAssistantTab(QWidget):
         """)
 
         # Update any existing chat bubbles
-        for i in range(self.chat_list.count()):
-            item = self.chat_list.item(i)
-            widget = self.chat_list.itemWidget(item)
+        for i in range(self.chat_scroll_layout.count()):
+            widget = self.chat_scroll_layout.itemAt(i).widget()
             if widget:
-                # The item widget is the wrapper, its child is the bubble
+                # The widget in the layout is the wrapper.
                 bubble = widget.findChild(ChatBubble)
                 if bubble:
                     bubble.set_stylesheet()
