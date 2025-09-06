@@ -3,6 +3,7 @@ import json
 import os
 import re
 import socket
+from threading import Event
 
 from PyQt6.QtCore import (
     pyqtSignal, Qt, QTimer, QPoint, QSize, QPropertyAnimation, QEasingCurve,
@@ -468,7 +469,7 @@ class ThinkingWidget(QWidget):
         super().__init__(parent)
         self.is_expanded = True
         self._init_ui()
-        self.set_stylesheet() # Apply theme-aware styles
+        self.set_stylesheet()
 
     def _init_ui(self):
         self.main_layout = QVBoxLayout(self)
@@ -480,11 +481,9 @@ class ThinkingWidget(QWidget):
         header_layout.setContentsMargins(5, 5, 5, 5)
 
         self.toggle_button = QPushButton("Thinking...")
-        self.toggle_button.setStyleSheet("border: none; text-align: left; font-weight: bold;")
         self.toggle_button.clicked.connect(self.toggle_content)
 
         self.arrow_label = QLabel("\u25BC") # Down-pointing arrow
-        self.arrow_label.setStyleSheet("border: none;")
 
         header_layout.addWidget(self.toggle_button)
         header_layout.addStretch()
@@ -495,15 +494,12 @@ class ThinkingWidget(QWidget):
 
         self.main_layout.addWidget(self.header_frame)
         self.main_layout.addWidget(self.content_widget)
-        self.adjustSize()
 
     def set_stylesheet(self):
         """Sets theme-aware stylesheet."""
         palette = self.palette()
         base_color = palette.color(QPalette.ColorRole.Base)
-        # A color slightly lighter/darker than the base for the header
         header_color = base_color.lighter(110) if base_color.lightness() < 128 else base_color.darker(103)
-        # A color for the content that is between the header and the base
         content_color = base_color.lighter(105) if base_color.lightness() < 128 else base_color.darker(101)
         border_color = palette.color(QPalette.ColorRole.Mid).name()
         text_color = palette.color(QPalette.ColorRole.Text).name()
@@ -511,11 +507,15 @@ class ThinkingWidget(QWidget):
 
         self.header_frame.setStyleSheet(f"background-color: {header_color.name()}; border-radius: 5px;")
         self.content_widget.setStyleSheet(f"""
-            background-color: {content_color.name()};
-            border: 1px solid {border_color};
-            border-top: none;
-            border-radius: 5px;
-            color: {muted_text_color};
+            QTextEdit {{
+                background-color: {content_color.name()};
+                border: 1px solid {border_color};
+                border-top: none;
+                border-bottom-left-radius: 5px;
+                border-bottom-right-radius: 5px;
+                color: {muted_text_color};
+                font-style: italic;
+            }}
         """)
         self.toggle_button.setStyleSheet(f"border: none; text-align: left; font-weight: bold; color: {text_color};")
         self.arrow_label.setStyleSheet(f"border: none; color: {text_color};")
@@ -524,77 +524,53 @@ class ThinkingWidget(QWidget):
         self.is_expanded = not self.is_expanded
         self.content_widget.setVisible(self.is_expanded)
         self.arrow_label.setText("\u25BC" if self.is_expanded else "\u25B6")
-
-        # When the widget is shown or hidden, its size hint changes.
-        # We just need to activate the parent's layout to ensure it recalculates,
-        # which will also update the scroll area correctly.
         if self.parentWidget() and self.parentWidget().layout():
             self.parentWidget().layout().activate()
 
     def append_text(self, text):
         self.content_widget.append(text)
-        self.adjustSize()
-        if self.parentWidget():
-             self.parentWidget().updateGeometry()
-
-    def is_collapsed(self):
-        return not self.is_expanded
 
 
 class ChatBubble(QFrame):
-    """
-    A QFrame-based chat bubble that correctly handles dynamic text resizing,
-    word wrapping, and theming using a QTextBrowser for robust rendering.
-    """
+    """A QFrame-based chat bubble that correctly handles dynamic text resizing."""
     def __init__(self, text, is_user, parent=None):
         super().__init__(parent)
         self.is_user = is_user
+        self._init_ui()
+        self.text_browser.insertPlainText(text)
+        self.set_stylesheet()
 
-        # Main layout for the bubble
+    def _init_ui(self):
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(1, 1, 1, 1)
 
-        # The QTextBrowser handles text display, wrapping, and selection
         self.text_browser = QTextBrowser(self)
         self.text_browser.setReadOnly(True)
         self.text_browser.setOpenExternalLinks(True)
         self.text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # This is the key change suggested by the code review.
-        # Expanding horizontally will make it take up available space, but the alignment
-        # wrapper will constrain it. Preferred vertically means it will grow as needed.
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.text_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
-
-        # IMPORTANT: Connect the signal that triggers height adjustment.
         self.text_browser.document().contentsChanged.connect(self.on_contents_changed)
 
-        # Set the text using a consistent method. This was the source of the regression.
-        # Using insertPlainText for both initial and streamed content ensures correct behavior.
-        self.text_browser.insertPlainText(text)
-
-        # A wrapper widget to control the alignment of the bubble
         self.wrapper = QWidget()
-        self.wrapper_layout = QHBoxLayout(self.wrapper)
-        self.wrapper_layout.setContentsMargins(5, 2, 5, 2)
+        wrapper_layout = QHBoxLayout(self.wrapper)
+        wrapper_layout.setContentsMargins(5, 2, 5, 2)
         if self.is_user:
-            self.wrapper_layout.addStretch()
-            self.wrapper_layout.addWidget(self)
+            wrapper_layout.addStretch()
+            wrapper_layout.addWidget(self)
         else:
-            self.wrapper_layout.addWidget(self)
-            self.wrapper_layout.addStretch()
+            wrapper_layout.addWidget(self)
+            wrapper_layout.addStretch()
 
         self.layout.addWidget(self.text_browser)
-        self.set_stylesheet()
 
     def on_contents_changed(self):
         """Adjusts the height of the widget to match the text content."""
         doc_height = self.text_browser.document().size().height()
-        # Add a small buffer for padding/margins
         self.text_browser.setFixedHeight(int(doc_height) + 15)
-        # The widget's overall height will be managed by the layout system now.
         self.updateGeometry()
 
     def set_stylesheet(self):
@@ -603,36 +579,25 @@ class ChatBubble(QFrame):
         if self.is_user:
             bg_color = palette.color(QPalette.ColorRole.Highlight).name()
             text_color = palette.color(QPalette.ColorRole.HighlightedText).name()
-            border_radius = "15px"
-            border_specific_radius = "border-bottom-right-radius: 3px;"
+            border_radius, border_specific = "15px", "border-bottom-right-radius: 3px;"
         else:
-            base_color = palette.color(QPalette.ColorRole.Base)
-            bg_color = base_color.lighter(115) if base_color.lightness() < 128 else base_color.darker(105)
+            base = palette.color(QPalette.ColorRole.Base)
+            bg_color = base.lighter(115) if base.lightness() < 128 else base.darker(105)
             bg_color = bg_color.name()
             text_color = palette.color(QPalette.ColorRole.Text).name()
-            border_radius = "15px"
-            border_specific_radius = "border-bottom-left-radius: 3px;"
+            border_radius, border_specific = "15px", "border-bottom-left-radius: 3px;"
 
         self.setStyleSheet(f"""
-            ChatBubble {{
-                background-color: {bg_color};
-                border-radius: {border_radius};
-                {border_specific_radius}
-            }}
+            ChatBubble {{ background-color: {bg_color}; border-radius: {border_radius}; {border_specific} }}
         """)
         self.text_browser.setStyleSheet(f"""
-            QTextBrowser {{
-                background-color: transparent;
-                border: none;
-                color: {text_color};
-                padding: 8px;
-            }}
+            QTextBrowser {{ background-color: transparent; border: none; color: {text_color}; padding: 8px; }}
         """)
 
     def append_text(self, text_chunk):
         """Appends a chunk of text to the browser."""
         self.text_browser.insertPlainText(text_chunk)
-        self.text_browser.ensureCursorVisible() # Scroll to the end
+        self.text_browser.ensureCursorVisible()
 
     def get_wrapper(self):
         """Returns the alignment wrapper widget."""
@@ -645,6 +610,7 @@ class AIAssistantTab(QWidget):
         self.thinking_widget = None
         self.current_ai_bubble = None
         self.ai_thread = None
+        self.cancellation_event = None
 
         self.ai_prompts = {
             "Threat Detection & Analysis": {
@@ -776,6 +742,14 @@ class AIAssistantTab(QWidget):
         self.user_input.setStyleSheet("border: none; background-color: transparent; font-size: 14px;")
         input_frame_layout.addWidget(self.user_input)
 
+        self.cancel_button = QPushButton()
+        self.cancel_button.setFixedSize(30, 30)
+        self.cancel_button.setStyleSheet("QPushButton { border: none; background-color: transparent; }")
+        self.cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cancel_button.setToolTip("Cancel AI generation")
+        self.cancel_button.setEnabled(False)
+        input_frame_layout.addWidget(self.cancel_button)
+
         self.send_button = QPushButton()
         self.send_button.setFixedSize(30, 30)
         self.send_button.setStyleSheet("QPushButton { border: none; background-color: transparent; }")
@@ -799,6 +773,7 @@ class AIAssistantTab(QWidget):
         # --- Connections ---
         self.send_button.clicked.connect(self.send_message)
         self.user_input.returnPressed.connect(self.send_message)
+        self.cancel_button.clicked.connect(self.cancel_ai_analysis)
         self.ai_settings_btn.clicked.connect(self._show_ai_settings_menu)
 
         self.update_theme() # Set initial themed icons and styles
@@ -815,6 +790,8 @@ class AIAssistantTab(QWidget):
         self.ai_settings_btn.setIconSize(QSize(24, 24))
         self.send_button.setIcon(create_themed_icon(os.path.join("icons", "paper-airplane.svg"), text_color))
         self.send_button.setIconSize(QSize(24, 24))
+        self.cancel_button.setIcon(create_themed_icon(os.path.join("icons", "shield.svg"), text_color)) # Placeholder
+        self.cancel_button.setIconSize(QSize(22, 22))
 
         # Update input bar style
         self.input_frame.setStyleSheet(f"""
@@ -889,17 +866,31 @@ class AIAssistantTab(QWidget):
         self.start_ai_analysis(user_text)
 
     def start_ai_analysis(self, prompt):
-        # This will require the parent (main window) to have this method
+        if self.ai_thread and self.ai_thread.isRunning():
+            QMessageBox.warning(self, "Busy", "An AI analysis is already in progress.")
+            return
+
         ai_settings = self.parent.get_ai_settings()
         if not ai_settings:
-            self.handle_ai_error("AI settings are not configured. Please configure them in the main window.")
+            self.handle_ai_error("AI settings are not configured. Please click the settings icon to set them up.")
             return
+
+        self.send_button.setEnabled(False)
+        self.cancel_button.setEnabled(True)
         self._show_typing_indicator(True)
-        self.ai_thread = AIAnalysisThread(prompt, ai_settings, self)
+
+        self.cancellation_event = Event()
+        self.ai_thread = AIAnalysisThread(prompt, ai_settings, self.cancellation_event, self)
         self.ai_thread.response_ready.connect(self.handle_ai_response)
         self.ai_thread.error.connect(self.handle_ai_error)
         self.ai_thread.finished.connect(self.on_ai_thread_finished)
         self.ai_thread.start()
+
+    def cancel_ai_analysis(self):
+        if self.ai_thread and self.ai_thread.isRunning():
+            self.ai_thread.stop()
+            self._show_typing_indicator(False)
+            self.handle_ai_error("Analysis canceled by user.")
 
     def handle_ai_response(self, chunk, is_thinking, is_final_answer_chunk):
         self._show_typing_indicator(False)
@@ -929,15 +920,24 @@ class AIAssistantTab(QWidget):
 
     def on_ai_thread_finished(self):
         self._show_typing_indicator(False)
+        self.send_button.setEnabled(True)
+        self.cancel_button.setEnabled(False)
         self.thinking_widget = None
         self.current_ai_bubble = None
+        self.cancellation_event = None
 
     def handle_ai_error(self, error_message):
         self._show_typing_indicator(False)
-        self._add_chat_bubble(f"Error: {error_message}", is_user=False)
+        if "canceled by user" not in error_message:
+             self._add_chat_bubble(f"Error: {error_message}", is_user=False)
         if self.thinking_widget: self.thinking_widget.hide()
+
+        # Reset UI state
+        self.send_button.setEnabled(True)
+        self.cancel_button.setEnabled(False)
         self.thinking_widget = None
         self.current_ai_bubble = None
+        self.cancellation_event = None
 
     def send_to_analyst(self, tool_name, results_data=None, context=None):
         formatted_results, header = "", ""

@@ -70,15 +70,14 @@ class AIAnalysisThread(QThread):
     Emits signals for each chunk of the response, distinguishing between 'thinking'
     and 'answer' parts of the stream.
     """
-    # Signal: (chunk, is_thinking, is_final_answer_chunk)
     response_ready = pyqtSignal(str, bool, bool)
     error = pyqtSignal(str)
 
-    def __init__(self, prompt, settings, parent=None):
+    def __init__(self, prompt, settings, cancellation_event, parent=None):
         super().__init__(parent)
         self.prompt = prompt
         self.settings = settings
-        self.stop_event = Event()
+        self.cancellation_event = cancellation_event
 
     def run(self):
         if not requests:
@@ -97,21 +96,30 @@ class AIAnalysisThread(QThread):
             if api_key and provider == "OpenAI":
                 headers["Authorization"] = f"Bearer {api_key}"
 
+            # The special tags should be part of the prompt for models that support them.
+            # This is a more robust way to guide the model's output format.
+            tagged_prompt = f"Please provide your response in two parts. First, explain your thought process within <thinking></thinking> tags. Then, provide the final answer within <answer></answer> tags.\n\nUser query: {self.prompt}"
+
             payload = {
                 "model": model,
-                "messages": [{"role": "user", "content": self.prompt}],
+                "messages": [{"role": "user", "content": tagged_prompt}],
                 "stream": True
             }
 
             with requests.post(endpoint, headers=headers, json=payload, stream=True, timeout=60) as response:
                 response.raise_for_status()
 
-                is_thinking_phase = False
-                is_answer_phase = False
+                # Simplified state management
+                current_phase = None # Can be "thinking" or "answer"
+                buffer = ""
 
                 for line in response.iter_lines():
-                    if self.stop_event.is_set(): break
-                    if not line: continue
+                    if self.cancellation_event.is_set():
+                        logging.info("AI analysis thread cancelled by user.")
+                        break
+
+                    if not line:
+                        continue
 
                     line = line.decode('utf-8')
                     if line.startswith('data:'):
@@ -123,30 +131,61 @@ class AIAnalysisThread(QThread):
                                 (data.get('choices', [{}])[0].get('delta', {}).get('content', '')) or \
                                 data.get('response', '')
 
-                        if not chunk: continue
+                        if not chunk:
+                            continue
 
-                        # Use regex for case-insensitive tag matching and removal
-                        if re.search(r'<thinking>', chunk, re.IGNORECASE):
-                            is_thinking_phase = True
-                            is_answer_phase = False
-                            chunk = re.sub(r'<\/?thinking>', '', chunk, flags=re.IGNORECASE).strip()
+                        buffer += chunk
 
-                        if re.search(r'<answer>', chunk, re.IGNORECASE):
-                            is_thinking_phase = False
-                            is_answer_phase = True
-                            chunk = re.sub(r'<\/?answer>', '', chunk, flags=re.IGNORECASE).strip()
+                        # Process buffer for tags
+                        while True:
+                            if self.cancellation_event.is_set(): break
 
-                        if chunk:
-                            self.response_ready.emit(chunk, is_thinking_phase, is_answer_phase)
+                            if current_phase is None:
+                                if '<thinking>' in buffer:
+                                    parts = buffer.split('<thinking>', 1)
+                                    buffer = parts[1]
+                                    current_phase = "thinking"
+                                elif '<answer>' in buffer:
+                                    parts = buffer.split('<answer>', 1)
+                                    buffer = parts[1]
+                                    current_phase = "answer"
+                                else:
+                                    break # Need more data
+
+                            elif current_phase == "thinking":
+                                if '</thinking>' in buffer:
+                                    parts = buffer.split('</thinking>', 1)
+                                    self.response_ready.emit(parts[0], True, False)
+                                    buffer = parts[1]
+                                    current_phase = None
+                                else:
+                                    self.response_ready.emit(buffer, True, False)
+                                    buffer = ""
+                                    break
+
+                            elif current_phase == "answer":
+                                if '</answer>' in buffer:
+                                    parts = buffer.split('</answer>', 1)
+                                    self.response_ready.emit(parts[0], False, True)
+                                    buffer = parts[1]
+                                    current_phase = None
+                                else:
+                                    self.response_ready.emit(buffer, False, True)
+                                    buffer = ""
+                                    break
+                            else:
+                                break
 
                     except json.JSONDecodeError:
                         logging.warning(f"Could not decode JSON from stream line: {line}")
                         continue
 
         except Exception as e:
-            error_message = f"Failed to get AI analysis: {e}"
-            logging.error(error_message, exc_info=True)
-            self.error.emit(error_message)
+            if not self.cancellation_event.is_set():
+                error_message = f"Failed to get AI analysis: {e}"
+                logging.error(error_message, exc_info=True)
+                self.error.emit(error_message)
 
     def stop(self):
-        self.stop_event.set()
+        """Signals the thread to stop."""
+        self.cancellation_event.set()
