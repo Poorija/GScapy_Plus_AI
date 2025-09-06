@@ -124,7 +124,7 @@ class AIAnalysisThread(QThread):
                         is_answer_chunk = '<answer>' in chunk.lower()
 
                         # Clean the chunk of tags
-                        cleaned_chunk = re.sub(r'<\/?(thinking|answer)>', '', chunk, flags=re.IGNORECASE).strip()
+                        cleaned_chunk = re.sub(r'<\/?(thinking|answer)>', '', chunk, flags=re.IGNORECASE)
 
                         # The logic in the GUI depends on the 'is_thinking' flag.
                         # A chunk is for the "thinking" widget only if it's marked as such AND not as an answer.

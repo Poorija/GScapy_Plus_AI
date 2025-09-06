@@ -591,10 +591,8 @@ class ChatBubble(QFrame):
 
     def on_contents_changed(self):
         """Adjusts the height of the widget to match the text content."""
-        doc_height = self.text_browser.document().size().height()
-        self.text_browser.setFixedHeight(int(doc_height) + 5) # Add a small buffer
-
-        # Update the size hint of the QListWidgetItem that holds this bubble
+        # Let the layout system handle the height automatically.
+        # We just need to ensure the item's size hint is updated.
         if self.item_in_list:
             self.item_in_list.setSizeHint(self.wrapper.sizeHint())
 
@@ -933,9 +931,8 @@ class AIAssistantTab(QWidget):
 
             if self.current_ai_bubble:
                 self.current_ai_bubble.append_text(chunk)
-                # We need to update the geometries to ensure the list item resizes
-                self.chat_list.updateGeometries()
-                QTimer.singleShot(50, self.chat_list.scrollToBottom)
+                # Ensure the view scrolls to the bottom as new text is added
+                self.chat_list.scrollToBottom()
 
     def on_ai_thread_finished(self):
         self._show_typing_indicator(False)
