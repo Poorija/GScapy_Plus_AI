@@ -569,9 +569,10 @@ class ChatBubble(QFrame):
         # IMPORTANT: Connect the signal BEFORE setting the text.
         self.text_browser.document().contentsChanged.connect(self.on_contents_changed)
 
-        # Now set the text, which will trigger the on_contents_changed signal
-        # for the first time, ensuring correct initial sizing.
-        self.text_browser.setPlainText(text)
+        # Now set the text using insertPlainText, which is the same method
+        # used for streaming AI responses. This ensures identical behavior.
+        # This will also trigger the on_contents_changed signal.
+        self.text_browser.insertPlainText(text)
 
         # Set a max width for the bubble
         if parent:
@@ -590,10 +591,6 @@ class ChatBubble(QFrame):
 
         self.layout.addWidget(self.text_browser)
         self.set_stylesheet()
-
-        # On the off-chance the initial text is empty, the signal might not fire.
-        # Call it once manually to ensure a minimum size is set.
-        self.on_contents_changed()
 
     def on_contents_changed(self):
         """Adjusts the height of the widget to match the text content."""
