@@ -581,8 +581,9 @@ class ChatBubble(QFrame):
         # IMPORTANT: Connect the signal that triggers height adjustment.
         self.text_browser.document().contentsChanged.connect(self.on_contents_changed)
 
-        # Set the text using a consistent method.
-        self.text_browser.setPlainText(text) # Use setPlainText for initial content
+        # Set the text using a consistent method. This was the source of the regression.
+        # Using insertPlainText for both initial and streamed content ensures correct behavior.
+        self.text_browser.insertPlainText(text)
 
         # A wrapper widget to control the alignment of the bubble
         self.wrapper = QWidget()
