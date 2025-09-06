@@ -858,7 +858,7 @@ class AIAssistantTab(QWidget):
         self.chat_scroll_layout.insertWidget(self.chat_scroll_layout.count() - 1, bubble_wrapper)
 
         # Scroll to the bottom to show the new message
-        QTimer.singleShot(50, self.scroll_area.verticalScrollBar().setValue, self.scroll_area.verticalScrollBar().maximum())
+        QTimer.singleShot(50, lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum()))
 
         if is_streaming:
             return bubble
