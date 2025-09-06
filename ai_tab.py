@@ -525,17 +525,11 @@ class ThinkingWidget(QWidget):
         self.content_widget.setVisible(self.is_expanded)
         self.arrow_label.setText("\u25BC" if self.is_expanded else "\u25B6")
 
-        # We need to inform the list view that our size has changed.
-        # A simple way is to update the geometry of the top-level widget.
-        if self.parentWidget():
-            self.parentWidget().updateGeometry()
-            # Find the QListWidgetItem this widget belongs to and update its size hint
-            for i in range(self.parentWidget().count()):
-                item = self.parentWidget().item(i)
-                widget = self.parentWidget().itemWidget(item)
-                if widget is self:
-                    item.setSizeHint(self.sizeHint())
-                    break
+        # When the widget is shown or hidden, its size hint changes.
+        # We just need to activate the parent's layout to ensure it recalculates,
+        # which will also update the scroll area correctly.
+        if self.parentWidget() and self.parentWidget().layout():
+            self.parentWidget().layout().activate()
 
     def append_text(self, text):
         self.content_widget.append(text)
@@ -566,10 +560,6 @@ class ChatBubble(QFrame):
         self.text_browser.setOpenExternalLinks(True)
         self.text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-        # Set a max width for the bubble based on the parent's width
-        if parent:
-            self.setMaximumWidth(int(parent.width() * 0.75))
 
         # This is the key change suggested by the code review.
         # Expanding horizontally will make it take up available space, but the alignment
@@ -868,16 +858,15 @@ class AIAssistantTab(QWidget):
     def _add_chat_bubble(self, message, is_user, is_streaming=False):
         # Create the bubble and its alignment wrapper
         bubble = ChatBubble(message, is_user, parent=self.scroll_content_widget)
+        # Use the scroll area's width for a more stable calculation.
+        bubble.setMaximumWidth(int(self.scroll_area.width() * 0.85))
         bubble_wrapper = bubble.get_wrapper()
 
         # Insert the new bubble before the stretch item
         self.chat_scroll_layout.insertWidget(self.chat_scroll_layout.count() - 1, bubble_wrapper)
 
-        # Force the UI to process the new widget addition immediately
-        QApplication.processEvents()
-
-        # Scroll to the bottom to show the new message
-        QTimer.singleShot(50, lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum()))
+        # Scroll to the bottom to show the new message. A slightly longer delay can be more reliable.
+        QTimer.singleShot(100, lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum()))
 
         if is_streaming:
             return bubble
@@ -936,7 +925,7 @@ class AIAssistantTab(QWidget):
                 self.current_ai_bubble.append_text(chunk)
 
         if is_at_bottom:
-            QTimer.singleShot(50, lambda: scroll_bar.setValue(scroll_bar.maximum()))
+            QTimer.singleShot(100, lambda: scroll_bar.setValue(scroll_bar.maximum()))
 
     def on_ai_thread_finished(self):
         self._show_typing_indicator(False)
