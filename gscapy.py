@@ -32,7 +32,25 @@ import re
 from qt_material import apply_stylesheet, list_themes
 from PyQt6.QtGui import QActionGroup, QPixmap, QImage, QPalette
 
-from ai_assistant_gui import AIAssistantTab, AISettingsDialog, AIGuideDialog
+def create_themed_icon(icon_path, color_str):
+    """Loads an SVG, intelligently replaces its color, and returns a QIcon."""
+    try:
+        with open(icon_path, 'r', encoding='utf-8') as f:
+            svg_data = f.read()
+
+        # First, try to replace a stroke color in a style block (for paper-airplane.svg)
+        themed_svg_data, count = re.subn(r'stroke:#[0-9a-fA-F]{6}', f'stroke:{color_str}', svg_data)
+
+        # If no stroke was found in a style, fall back to injecting a fill attribute (for gear.svg)
+        if count == 0 and '<svg' in themed_svg_data:
+            themed_svg_data = themed_svg_data.replace('<svg', f'<svg fill="{color_str}"')
+
+        image = QImage.fromData(themed_svg_data.encode('utf-8'))
+        pixmap = QPixmap.fromImage(image)
+        return QIcon(pixmap)
+    except Exception as e:
+        logging.warning(f"Could not create themed icon for {icon_path}: {e}")
+        return QIcon(icon_path) # Fallback to original icon
 
 def get_vendor(mac_address):
     """Retrieves the vendor for a given MAC address from an online API."""
@@ -62,6 +80,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QTextBrowser, QRadioButton, QButtonGroup, QFormLayout, QGridLayout, QDialog,
     QHeaderView, QInputDialog, QGraphicsOpacityEffect
 )
+from ai_tab import AIAssistantTab, AISettingsDialog, AIGuideDialog
 from PyQt6.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QSequentialAnimationGroup, QPoint, QSize
 from PyQt6.QtGui import QAction, QIcon, QFont, QTextCursor, QActionGroup
 
@@ -689,8 +708,6 @@ class NmapSummaryDialog(QDialog):
             self.tree.addTopLevelItem(QTreeWidgetItem(["Error parsing XML data."]))
 
 # --- Main Application ---
-
-# --- Main Application ---
 class GScapy(QMainWindow):
     """The main application window, holding all UI elements and logic."""
     def __init__(self):
@@ -780,7 +797,8 @@ class GScapy(QMainWindow):
     def _show_ai_settings_dialog(self):
         """Shows the AI settings dialog."""
         dialog = AISettingsDialog(self)
-        return dialog.exec()
+        dialog.exec()
+
     def _show_ai_guide_dialog(self):
         """Shows the AI features user guide."""
         dialog = AIGuideDialog(self)
@@ -990,7 +1008,6 @@ class GScapy(QMainWindow):
         self.tab_widget.addTab(self._create_advanced_tools_tab(), QIcon("icons/shield.svg"), "Advanced Tools")
         self.tab_widget.addTab(self._create_wireless_tools_tab(), QIcon("icons/wifi.svg"), "Wireless Tools")
 
-        # The AI Assistant Tab is now its own class
         self.ai_assistant_tab = AIAssistantTab(self)
         self.tab_widget.addTab(self.ai_assistant_tab, QIcon("icons/tool.svg"), "AI Assistant")
 

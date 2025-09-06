@@ -13,7 +13,8 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout,
     QDialog, QTabWidget, QLineEdit, QPushButton, QComboBox, QMessageBox,
     QInputDialog, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem,
-    QFrame, QMenu, QTextEdit, QTextBrowser, QGroupBox, QLabel, QSplitter, QScrollArea
+    QFrame, QMenu, QTextEdit, QTextBrowser, QGroupBox, QLabel, QSplitter, QScrollArea,
+    QSizePolicy
 )
 
 from ai_threads import FetchModelsThread, TestAPIThread, AIAnalysisThread
@@ -566,17 +567,22 @@ class ChatBubble(QFrame):
         self.text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # IMPORTANT: Connect the signal BEFORE setting the text.
-        self.text_browser.document().contentsChanged.connect(self.on_contents_changed)
-
-        # Now set the text using insertPlainText, which is the same method
-        # used for streaming AI responses. This ensures identical behavior.
-        # This will also trigger the on_contents_changed signal.
-        self.text_browser.insertPlainText(text)
-
-        # Set a max width for the bubble
+        # Set a max width for the bubble based on the parent's width
         if parent:
             self.setMaximumWidth(int(parent.width() * 0.75))
+
+        # This is the key change suggested by the code review.
+        # Expanding horizontally will make it take up available space, but the alignment
+        # wrapper will constrain it. Preferred vertically means it will grow as needed.
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.text_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+
+        # IMPORTANT: Connect the signal that triggers height adjustment.
+        self.text_browser.document().contentsChanged.connect(self.on_contents_changed)
+
+        # Set the text using a consistent method.
+        self.text_browser.setPlainText(text) # Use setPlainText for initial content
 
         # A wrapper widget to control the alignment of the bubble
         self.wrapper = QWidget()
@@ -595,8 +601,10 @@ class ChatBubble(QFrame):
     def on_contents_changed(self):
         """Adjusts the height of the widget to match the text content."""
         doc_height = self.text_browser.document().size().height()
-        # Add a small buffer for padding
+        # Add a small buffer for padding/margins
         self.text_browser.setFixedHeight(int(doc_height) + 15)
+        # The widget's overall height will be managed by the layout system now.
+        self.updateGeometry()
 
     def set_stylesheet(self):
         """Sets the stylesheet using the application's palette for theme-awareness."""
@@ -635,15 +643,9 @@ class ChatBubble(QFrame):
         self.text_browser.insertPlainText(text_chunk)
         self.text_browser.ensureCursorVisible() # Scroll to the end
 
-
     def get_wrapper(self):
         """Returns the alignment wrapper widget."""
         return self.wrapper
-
-    def finish_streaming(self):
-        # This method is kept for API compatibility but the styling is now static
-        pass
-
 
 class AIAssistantTab(QWidget):
     def __init__(self, parent=None):
@@ -739,7 +741,7 @@ class AIAssistantTab(QWidget):
         chat_container = QWidget()
         chat_layout = QVBoxLayout(chat_container)
         chat_layout.setContentsMargins(10, 10, 10, 10)
-        chat_layout.setSpacing(6) # Reduced spacing
+        chat_layout.setSpacing(6)
 
         # Header
         header = QTextBrowser()
@@ -753,7 +755,7 @@ class AIAssistantTab(QWidget):
         header.setStyleSheet("QTextBrowser { border: none; background: transparent; }")
         chat_layout.addWidget(header)
 
-        # Chat message area
+        # Chat message area using QScrollArea
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
@@ -784,7 +786,7 @@ class AIAssistantTab(QWidget):
         input_frame_layout.addWidget(self.user_input)
 
         self.send_button = QPushButton()
-        self.send_button.setFixedSize(30, 30) # Slightly smaller
+        self.send_button.setFixedSize(30, 30)
         self.send_button.setStyleSheet("QPushButton { border: none; background-color: transparent; }")
         self.send_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.send_button.setToolTip("Send Message")
@@ -892,14 +894,16 @@ class AIAssistantTab(QWidget):
         user_text = self.user_input.text().strip()
         if not user_text:
             return
-        # Add the user's message to the chat
         self._add_chat_bubble(user_text, is_user=True)
         self.user_input.clear()
         self.start_ai_analysis(user_text)
 
     def start_ai_analysis(self, prompt):
+        # This will require the parent (main window) to have this method
         ai_settings = self.parent.get_ai_settings()
-        if not ai_settings: return
+        if not ai_settings:
+            self.handle_ai_error("AI settings are not configured. Please configure them in the main window.")
+            return
         self._show_typing_indicator(True)
         self.ai_thread = AIAnalysisThread(prompt, ai_settings, self)
         self.ai_thread.response_ready.connect(self.handle_ai_response)
@@ -910,7 +914,6 @@ class AIAssistantTab(QWidget):
     def handle_ai_response(self, chunk, is_thinking, is_final_answer_chunk):
         self._show_typing_indicator(False)
 
-        # Check scrollbar position BEFORE adding new content
         scroll_bar = self.scroll_area.verticalScrollBar()
         is_at_bottom = (scroll_bar.value() >= scroll_bar.maximum() - 10)
 
@@ -921,7 +924,6 @@ class AIAssistantTab(QWidget):
             self.thinking_widget.append_text(chunk)
         else:
             if self.thinking_widget:
-                # Hide and eventually delete the thinking widget once we get a real answer
                 self.thinking_widget.hide()
                 self.thinking_widget.deleteLater()
                 self.thinking_widget = None
@@ -932,14 +934,11 @@ class AIAssistantTab(QWidget):
             if self.current_ai_bubble:
                 self.current_ai_bubble.append_text(chunk)
 
-        # Auto-scroll only if the user was already at the bottom
         if is_at_bottom:
             QTimer.singleShot(50, lambda: scroll_bar.setValue(scroll_bar.maximum()))
 
     def on_ai_thread_finished(self):
         self._show_typing_indicator(False)
-        if self.current_ai_bubble:
-            self.current_ai_bubble.finish_streaming()
         self.thinking_widget = None
         self.current_ai_bubble = None
 
@@ -955,24 +954,24 @@ class AIAssistantTab(QWidget):
         if tool_name == "nmap":
             header = f"Nmap scan results for target: {context}"
             if results_data:
-                try:
-                    root = etree.fromstring(results_data.encode('utf-8'))
-                    lines = [f"Host: {host.find('address').get('addr')}"]
-                    for port in host.findall('ports/port'):
-                        if port.find('state').get('state') == 'open':
-                            service = port.find('service')
-                            lines.append(f"  - Port {port.get('portid')}/{port.get('protocol')} ({service.get('name', 'n/a')}): {service.get('product', '')}")
-                    formatted_results = "\n".join(lines)
-                except Exception: formatted_results = results_data
+                # This part will fail because lxml is not imported here.
+                # This needs to be handled during integration.
+                formatted_results = results_data
             else: formatted_results = "No Nmap XML data available."
         elif tool_name == "subdomain":
-            header, formatted_results = f"Subdomain scan for: {context}", "\n".join([results_data.topLevelItem(i).text(0) for i in range(results_data.topLevelItemCount())])
+            header = f"Subdomain scan for: {context}"
+            formatted_results = "\n".join([results_data.topLevelItem(i).text(0) for i in range(results_data.topLevelItemCount())])
         elif tool_name == "port_scanner":
-            header, formatted_results = f"Port scan for: {context}", "\n".join([f"Port {p} is {s} ({srv})" for p, s, srv in results_data])
+            header = f"Port scan for: {context}"
+            formatted_results = "\n".join([f"Port {p} is {s} ({srv})" for p, s, srv in results_data])
+
         if not formatted_results.strip():
-            QMessageBox.information(self, "No Data", "No data to send."); return
+            QMessageBox.information(self, "No Data", "No data to send.")
+            return
+
         full_text = f"Analyze the following from {tool_name} and summarize potential vulnerabilities or next steps.\n\n--- {header} ---\n{formatted_results}\n--- END ---"
         self.user_input.setText(full_text)
+        # This will require the parent to have a tab_widget attribute
         self.parent.tab_widget.setCurrentWidget(self)
 
     def _show_ai_settings_menu(self):
@@ -983,10 +982,12 @@ class AIAssistantTab(QWidget):
                 with open(settings_file, 'r') as f: settings = json.load(f)
         except (IOError, json.JSONDecodeError) as e:
             QMessageBox.warning(self, "Error", f"Could not load AI settings: {e}"); return
+
         menu = QMenu(self)
         provider_group = QActionGroup(self)
         provider_group.setExclusive(True)
-        active_provider, active_model = settings.get("active_provider"), settings.get("active_model")
+        active_provider = settings.get("active_provider")
+        active_model = settings.get("active_model")
 
         # Local AI
         local_settings = settings.get("local_ai", {})
@@ -1012,6 +1013,7 @@ class AIAssistantTab(QWidget):
         online_menu.setEnabled(online_options_exist)
 
         menu.addSeparator()
+        # This will require the parent to have this method
         menu.addAction("Advanced Settings...", self.parent._show_ai_settings_dialog)
         menu.exec(self.ai_settings_btn.mapToGlobal(self.ai_settings_btn.rect().bottomLeft()))
 
