@@ -549,34 +549,36 @@ class ThinkingWidget(QWidget):
 class ChatBubble(QFrame):
     """
     A QFrame-based chat bubble that correctly handles dynamic text resizing,
-    word wrapping, and theming.
+    word wrapping, and theming using a QTextBrowser for robust rendering.
     """
     def __init__(self, text, is_user, parent=None):
         super().__init__(parent)
         self.is_user = is_user
+        self.item_in_list = None # To hold the QListWidgetItem
 
         # Main layout for the bubble
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(10, 8, 10, 8) # Padding inside the bubble
+        self.layout.setContentsMargins(1, 1, 1, 1) # Minimal margins, handled by text browser
 
-        # The QLabel will handle the text display
-        self.label = QLabel(text)
-        self.label.setWordWrap(True)
-        # Allow text selection and link interaction
-        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse)
-        self.label.setOpenExternalLinks(True)
+        # The QTextBrowser handles text display, wrapping, and selection
+        self.text_browser = QTextBrowser(self)
+        self.text_browser.setPlainText(text)
+        self.text_browser.setReadOnly(True)
+        self.text_browser.setOpenExternalLinks(True)
+        self.text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # Set a max width for the label based on the parent list view
+        # Connect contentsChanged to automatically adjust height
+        self.text_browser.document().contentsChanged.connect(self.on_contents_changed)
+
+        # Set a max width for the bubble
         if parent:
-            # Set a reasonable maximum width for the bubble to ensure it doesn't span the entire chat view.
-            # This helps with readability and the classic chat look.
             self.setMaximumWidth(int(parent.width() * 0.75))
-
 
         # A wrapper widget to control the alignment of the bubble
         self.wrapper = QWidget()
         self.wrapper_layout = QHBoxLayout(self.wrapper)
-        self.wrapper_layout.setContentsMargins(5, 2, 5, 2) # Margins for the entire list item
+        self.wrapper_layout.setContentsMargins(5, 2, 5, 2)
         if self.is_user:
             self.wrapper_layout.addStretch()
             self.wrapper_layout.addWidget(self)
@@ -584,49 +586,54 @@ class ChatBubble(QFrame):
             self.wrapper_layout.addWidget(self)
             self.wrapper_layout.addStretch()
 
-        self.layout.addWidget(self.label)
+        self.layout.addWidget(self.text_browser)
         self.set_stylesheet()
+
+    def on_contents_changed(self):
+        """Adjusts the height of the widget to match the text content."""
+        doc_height = self.text_browser.document().size().height()
+        self.text_browser.setFixedHeight(int(doc_height) + 5) # Add a small buffer
+
+        # Update the size hint of the QListWidgetItem that holds this bubble
+        if self.item_in_list:
+            self.item_in_list.setSizeHint(self.wrapper.sizeHint())
 
     def set_stylesheet(self):
         """Sets the stylesheet using the application's palette for theme-awareness."""
         palette = self.palette()
         if self.is_user:
-            # User messages use the theme's highlight color (e.g., blue in default themes)
             bg_color = palette.color(QPalette.ColorRole.Highlight).name()
             text_color = palette.color(QPalette.ColorRole.HighlightedText).name()
-            self.setStyleSheet(f"""
-                ChatBubble {{
-                    background-color: {bg_color};
-                    color: {text_color};
-                    border-radius: 15px;
-                    border-bottom-right-radius: 3px;
-                }}
-            """)
+            border_radius = "15px"
+            border_specific_radius = "border-bottom-right-radius: 3px;"
         else:
-            # AI messages use a color slightly different from the base window color
-            # This creates a subtle visual distinction. We calculate this color.
             base_color = palette.color(QPalette.ColorRole.Base)
-            # Make the AI bubble slightly lighter or darker depending on the theme
             bg_color = base_color.lighter(115) if base_color.lightness() < 128 else base_color.darker(105)
+            bg_color = bg_color.name()
             text_color = palette.color(QPalette.ColorRole.Text).name()
-            self.setStyleSheet(f"""
-                ChatBubble {{
-                    background-color: {bg_color.name()};
-                    color: {text_color};
-                    border-radius: 15px;
-                    border-bottom-left-radius: 3px;
-                }}
-            """)
+            border_radius = "15px"
+            border_specific_radius = "border-bottom-left-radius: 3px;"
 
-        # The label inside the bubble should have a transparent background
-        self.label.setStyleSheet(f"color: {text_color}; background-color: transparent;")
+        self.setStyleSheet(f"""
+            ChatBubble {{
+                background-color: {bg_color};
+                border-radius: {border_radius};
+                {border_specific_radius}
+            }}
+        """)
+        self.text_browser.setStyleSheet(f"""
+            QTextBrowser {{
+                background-color: transparent;
+                border: none;
+                color: {text_color};
+                padding: 8px;
+            }}
+        """)
 
     def append_text(self, text_chunk):
-        """Appends a chunk of text to the label."""
-        self.label.setText(self.label.text() + text_chunk)
-        # Recalculate the size hint of the wrapper
-        self.wrapper.adjustSize()
-        self.wrapper.parent().updateGeometry()
+        """Appends a chunk of text to the browser."""
+        self.text_browser.insertPlainText(text_chunk)
+        self.text_browser.ensureCursorVisible() # Scroll to the end
 
 
     def get_wrapper(self):
@@ -859,7 +866,10 @@ class AIAssistantTab(QWidget):
 
         # Create a list item and associate the wrapper widget with it
         item = QListWidgetItem(self.chat_list)
-        # Set the size hint based on the wrapper's preferred size
+        # Pass the item to the bubble so it can update its own size hint
+        bubble.item_in_list = item
+
+        # Set the initial size hint
         item.setSizeHint(bubble_wrapper.sizeHint())
 
         self.chat_list.addItem(item)

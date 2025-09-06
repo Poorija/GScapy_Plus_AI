@@ -32,7 +32,7 @@ import re
 from qt_material import apply_stylesheet, list_themes
 from PyQt6.QtGui import QActionGroup, QPixmap, QImage, QPalette
 
-from ai_assistant_gui import AIAssistantTab
+from ai_assistant_gui import AIAssistantTab, AISettingsDialog, AIGuideDialog
 
 def get_vendor(mac_address):
     """Retrieves the vendor for a given MAC address from an online API."""

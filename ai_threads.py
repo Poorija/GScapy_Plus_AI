@@ -75,7 +75,6 @@ class AIAnalysisThread(QThread):
     def run(self):
         try:
             import requests
-            import json
 
             provider = self.settings.get("provider")
             endpoint = self.settings.get("endpoint")
@@ -98,42 +97,44 @@ class AIAnalysisThread(QThread):
             with requests.post(endpoint, headers=headers, json=payload, stream=True, timeout=60) as response:
                 response.raise_for_status()
 
-                is_thinking_phase = False
-                is_answer_phase = False
-
                 for line in response.iter_lines():
-                    if self.stop_event.is_set(): break
-                    if not line: continue
+                    if self.stop_event.is_set():
+                        break
+                    if not line:
+                        continue
 
-                    line = line.decode('utf-8')
-                    if line.startswith('data:'):
-                        line = line[5:].strip()
+                    line_str = line.decode('utf-8')
+                    if line_str.startswith('data:'):
+                        line_str = line_str[5:].strip()
+
+                    if not line_str:
+                        continue
 
                     try:
-                        data = json.loads(line)
+                        data = json.loads(line_str)
                         chunk = data.get('message', {}).get('content', '') or \
                                 (data.get('choices', [{}])[0].get('delta', {}).get('content', '')) or \
                                 data.get('response', '')
 
-                        if not chunk: continue
+                        if not chunk:
+                            continue
 
-                        # Use regex for case-insensitive tag matching and removal
-                        if re.search(r'<thinking>', chunk, re.IGNORECASE):
-                            is_thinking_phase = True
-                            is_answer_phase = False
-                            chunk = re.sub(r'<\/?thinking>', '', chunk, flags=re.IGNORECASE).strip()
+                        # Determine the state for each chunk independently
+                        is_thinking_chunk = '<thinking>' in chunk.lower()
+                        is_answer_chunk = '<answer>' in chunk.lower()
 
-                        if re.search(r'<answer>', chunk, re.IGNORECASE):
-                            is_thinking_phase = False
-                            is_answer_phase = True
-                            chunk = re.sub(r'<\/?answer>', '', chunk, flags=re.IGNORECASE).strip()
+                        # Clean the chunk of tags
+                        cleaned_chunk = re.sub(r'<\/?(thinking|answer)>', '', chunk, flags=re.IGNORECASE).strip()
 
-                        if chunk:
-                            # The third parameter was incorrect, it should be is_answer_phase
-                            self.response_ready.emit(chunk, is_thinking_phase, is_answer_phase)
+                        # The logic in the GUI depends on the 'is_thinking' flag.
+                        # A chunk is for the "thinking" widget only if it's marked as such AND not as an answer.
+                        is_for_thinking_widget = is_thinking_chunk and not is_answer_chunk
+
+                        if cleaned_chunk:
+                            self.response_ready.emit(cleaned_chunk, is_for_thinking_widget, is_answer_chunk)
 
                     except json.JSONDecodeError:
-                        logging.warning(f"Could not decode JSON from stream line: {line}")
+                        logging.warning(f"Could not decode JSON from stream line: {line_str}")
                         continue
 
         except Exception as e:
