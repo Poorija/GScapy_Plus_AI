@@ -868,6 +868,9 @@ class AIAssistantTab(QWidget):
         # Insert the new bubble before the stretch item
         self.chat_scroll_layout.insertWidget(self.chat_scroll_layout.count() - 1, bubble_wrapper)
 
+        # Force the UI to process the new widget addition immediately
+        QApplication.processEvents()
+
         # Scroll to the bottom to show the new message
         QTimer.singleShot(50, lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum()))
 
